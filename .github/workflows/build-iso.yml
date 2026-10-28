@@ -1,24 +1,58 @@
-name: Build ISO
+name: Build MiniOS ISO
+
 on:
   workflow_dispatch:
   push:
     branches: [main]
+
+permissions:
+  contents: read
+
 jobs:
   iso:
+    name: Build ISO (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: i386
+            platform: linux/386
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android || true
+
+      - name: Enable 32-bit container support
+        if: matrix.arch == 'i386'
+        run: docker run --privileged --rm tonistiigi/binfmt --install 386
+
       - name: Build ISO in Debian container
-        run: docker run --rm --privileged -v "$PWD":/work -w /work debian:bookworm bash build.sh
-      - name: Show result
-        run: ls -lh MiniOS.iso*
-      - uses: actions/upload-artifact@v4
+        run: |
+          docker run --rm --privileged \
+            --platform ${{ matrix.platform }} \
+            -e ARCH=${{ matrix.arch }} \
+            -v "$PWD":/work -w /work \
+            debian:bookworm bash build.sh
+
+      - name: Verify ISO and checksum
+        run: |
+          test -s "MiniOS-${{ matrix.arch }}.iso"
+          test -s "MiniOS-${{ matrix.arch }}.iso.sha256"
+          sha256sum -c "MiniOS-${{ matrix.arch }}.iso.sha256"
+          ls -lh MiniOS-${{ matrix.arch }}.iso*
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: MiniOS-iso
+          name: MiniOS-${{ matrix.arch }}
           path: |
-            MiniOS.iso
-            MiniOS.iso.sha256
+            MiniOS-${{ matrix.arch }}.iso
+            MiniOS-${{ matrix.arch }}.iso.sha256
           compression-level: 0
+          if-no-files-found: error
