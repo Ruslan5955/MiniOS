@@ -129,7 +129,12 @@ chmod +x auto/config config/hooks/live/* $INC/usr/local/bin/miniguard
 
 apt-get update
 apt-get install -y live-build xorriso isolinux syslinux-common mtools dosfstools \
-    grub-pc-bin grub-efi-amd64-bin debootstrap squashfs-tools ca-certificates
+    grub-pc-bin debootstrap squashfs-tools ca-certificates
+if [ "$ARCH" = "amd64" ]; then
+  apt-get install -y grub-efi-amd64-bin
+else
+  apt-get install -y grub-efi-ia32-bin
+fi
 
 lb config
 grep -q "bookworm" config/bootstrap || { echo "ОШИБКА: lb config не взял bookworm (auto/config не сработал)"; cat config/bootstrap; exit 1; }
