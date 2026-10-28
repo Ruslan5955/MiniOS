@@ -1,0 +1,61 @@
+name: Build Gloria OS ISO
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "gloria-os/**"
+      - ".github/workflows/build-gloria-os.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gloria-os-iso
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build bootable 64-bit ISO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install live-build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y live-build debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools dosfstools
+
+      - name: Configure Gloria OS
+        working-directory: gloria-os
+        run: |
+          chmod +x auto/config
+          sudo lb config
+
+      - name: Build live ISO
+        working-directory: gloria-os
+        run: |
+          sudo lb build
+          sudo chown -R "$USER:$USER" .
+
+      - name: Find ISO and create checksum
+        working-directory: gloria-os
+        run: |
+          ISO="$(find . -maxdepth 2 -type f -name '*.iso' -print -quit)"
+          test -n "$ISO"
+          mv "$ISO" Gloria-OS-amd64.iso
+          sha256sum Gloria-OS-amd64.iso > Gloria-OS-amd64.iso.sha256
+          ls -lh Gloria-OS-amd64.iso Gloria-OS-amd64.iso.sha256
+          file Gloria-OS-amd64.iso
+
+      - name: Upload bootable ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gloria-OS-amd64
+          path: |
+            gloria-os/Gloria-OS-amd64.iso
+            gloria-os/Gloria-OS-amd64.iso.sha256
+          if-no-files-found: error
+          retention-days: 7
