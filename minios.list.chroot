@@ -1,0 +1,59 @@
+# --- Графика и рабочий стол ---
+xorg
+xfce4
+xfce4-terminal
+lightdm
+lightdm-gtk-greeter
+policykit-1-gnome
+dbus-x11
+adwaita-icon-theme
+fonts-dejavu
+thunar-volman
+gvfs
+gvfs-backends
+udisks2
+mousepad
+ristretto
+file-roller
+# --- Сеть и браузер ---
+network-manager
+network-manager-gnome
+wpasupplicant
+ca-certificates
+firefox-esr
+firefox-esr-l10n-ru
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-misc-nonfree
+# --- Диски и восстановление ---
+gparted
+parted
+ntfs-3g
+exfatprogs
+dosfstools
+e2fsprogs
+smartmontools
+testdisk
+gddrescue
+hdparm
+nvme-cli
+chntpw
+# --- Безопасность ---
+clamav
+clamav-freshclam
+python3
+# --- Система ---
+locales
+console-setup
+keyboard-configuration
+sudo
+htop
+pciutils
+usbutils
+lshw
+curl
+wget
+rsync
+nano
+iputils-ping
