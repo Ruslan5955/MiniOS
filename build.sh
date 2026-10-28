@@ -5,6 +5,13 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+ARCH="${ARCH:-amd64}"
+case "$ARCH" in
+  amd64) KERNEL_FLAVOUR=amd64 ;;
+  i386) KERNEL_FLAVOUR=686-pae ;;
+  *) echo "ОШИБКА: ARCH должен быть amd64 или i386"; exit 2 ;;
+esac
+
 for f in miniguard guard.py; do
   [ -f "$f" ] || { echo "ОШИБКА: в репозитории нет файла $f"; exit 1; }
 done
@@ -16,12 +23,12 @@ mkdir -p $INC/usr/local/bin $INC/usr/local/lib/miniguard $INC/etc/skel/Desktop
 cp miniguard $INC/usr/local/bin/miniguard
 cp guard.py $INC/usr/local/lib/miniguard/guard.py
 
-cat > auto/config <<'EOF'
+cat > auto/config <<EOF
 #!/bin/sh
 set -e
 lb config noauto \
 	--distribution bookworm \
-	--architectures amd64 \
+	--architectures "$ARCH" \
 	--archive-areas "main contrib non-free non-free-firmware" \
 	--binary-images iso-hybrid \
 	--debian-installer none \
@@ -29,7 +36,7 @@ lb config noauto \
 	--apt-recommends false \
 	--apt-indices false \
 	--firmware-chroot true \
-	--linux-flavours amd64 \
+	--linux-flavours "$KERNEL_FLAVOUR" \
 	--chroot-squashfs-compression-type xz \
 	--iso-volume MINIOS \
 	--iso-application "MiniOS" \
@@ -140,8 +147,10 @@ lb config
 grep -q "bookworm" config/bootstrap || { echo "ОШИБКА: lb config не взял bookworm (auto/config не сработал)"; cat config/bootstrap; exit 1; }
 lb build
 
-mv -f live-image-*.iso MiniOS.iso
-sha256sum MiniOS.iso > MiniOS.iso.sha256
-ls -lh MiniOS.iso
-SIZE=$(stat -c %s MiniOS.iso)
+ISO_FILE="$(find . -maxdepth 1 -type f -name "live-image-*.iso" -print -quit)"
+[ -n "$ISO_FILE" ] || { echo "ОШИБКА: live-build не создал ISO"; exit 1; }
+mv -f "$ISO_FILE" "MiniOS-${ARCH}.iso"
+sha256sum "MiniOS-${ARCH}.iso" > "MiniOS-${ARCH}.iso.sha256"
+ls -lh "MiniOS-${ARCH}.iso"
+SIZE=$(stat -c %s "MiniOS-${ARCH}.iso")
 if [ "$SIZE" -gt 1600000000 ]; then echo "ВНИМАНИЕ: образ больше 1.6 ГБ, на флешку 2 ГБ может не влезть"; fi
