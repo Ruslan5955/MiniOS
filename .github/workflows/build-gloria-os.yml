@@ -31,8 +31,8 @@ jobs:
       - name: Configure Gloria OS
         working-directory: gloria-os
         run: |
-          chmod +x auto/config
-          sudo lb config
+          chmod +x auto/config config/hooks/normal/0200-gloria-branding.hook.chroot
+          sudo ./auto/config
 
       - name: Build live ISO
         working-directory: gloria-os
