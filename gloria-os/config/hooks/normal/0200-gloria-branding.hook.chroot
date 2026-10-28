@@ -1,0 +1,37 @@
+#!/bin/sh
+set -e
+# Configure a clean, dark XFCE desktop with a Windows-like bottom panel.
+if command -v xfconf-query >/dev/null 2>&1; then
+  install -d -m 0755 /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
+  cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Arc-Dark"/>
+    <property name="IconThemeName" type="string" value="Papirus-Dark"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="Noto Sans 10"/>
+    <property name="CursorThemeName" type="string" value="Adwaita"/>
+  </property>
+</channel>
+EOF
+fi
+# Add a helpful desktop readme shortcut.
+install -d -m 0755 /etc/skel/Desktop
+cat > /etc/skel/Desktop/Welcome-to-Gloria.desktop <<'EOF'
+[Desktop Entry]
+Type=Link
+Name=Welcome to Gloria OS
+Comment=Information about this live system
+URL=https://github.com/Ruslan5955/MiniOS/tree/main/gloria-os
+Icon=help-about
+EOF
+chmod 0644 /etc/skel/Desktop/Welcome-to-Gloria.desktop
+# Set live-session default user home settings if present.
+mkdir -p /etc/skel/.config
+cat > /etc/skel/.gtkrc-2.0 <<'EOF'
+gtk-theme-name="Arc-Dark"
+gtk-icon-theme-name="Papirus-Dark"
+gtk-font-name="Noto Sans 10"
+EOF
