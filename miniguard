@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""miniguard: офлайн-проверка Windows-дисков из живой системы MiniOS.
+
+Диски монтируются только для чтения. Чтобы пометить найденные файлы
+(переименовать в *.quarantined), добавьте --quarantine: тогда диск
+подключится на запись.
+"""
+import argparse
+import glob
+import json
+import os
+import subprocess
+import sys
+import threading
+
+sys.path.insert(0, "/usr/local/lib/miniguard")
+import guard  # noqa: E402
+
+
+def sh(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def ntfs_partitions():
+    r = sh(["lsblk", "-J", "-o", "PATH,FSTYPE,LABEL,SIZE,MOUNTPOINTS"])
+    try:
+        tree = json.loads(r.stdout)
+    except ValueError:
+        return []
+    found = []
+
+    def walk(nodes):
+        for n in nodes:
+            fs = (n.get("fstype") or "").lower()
+            if fs in ("ntfs", "bitlocker"):
+                mps = [m for m in (n.get("mountpoints") or []) if m]
+                found.append((n["path"], fs, n.get("label") or "", n.get("size") or "", mps))
+            walk(n.get("children") or [])
+    walk(tree.get("blockdevices", []))
+    return found
+
+
+def mount(dev, mps, rw):
+    if mps and not rw:
+        return mps[0]
+    if mps and rw:
+        sh(["sudo", "umount", dev])
+    mp = "/mnt/" + os.path.basename(dev)
+    sh(["sudo", "mkdir", "-p", mp])
+    r = sh(["sudo", "mount", "-o", "rw" if rw else "ro", dev, mp])
+    if r.returncode != 0:
+        print(f"  не удалось подключить {dev}: {(r.stderr or r.stdout).strip()}")
+        print("  (если Windows гибернирована или стоит «быстрый запуск», выключите её полностью: shutdown /s /f /t 0)")
+        return None
+    return mp
+
+
+def quick_roots(mp):
+    roots = []
+    users = os.path.join(mp, "Users")
+    if os.path.isdir(users):
+        for u in sorted(os.listdir(users)):
+            base = os.path.join(users, u)
+            if os.path.islink(base) or not os.path.isdir(base):
+                continue
+            for sub in ("Downloads", "Desktop", "AppData/Local/Temp", "AppData/Roaming"):
+                p = os.path.join(base, sub)
+                if os.path.isdir(p):
+                    roots.append(p)
+    for extra in ("ProgramData", "Windows/Temp"):
+        p = os.path.join(mp, extra)
+        if os.path.isdir(p):
+            roots.append(p)
+    return roots
+
+
+def scan(roots, skip, trusted, quarantine):
+    stop = threading.Event()
+    hits = []
+
+    def prog(n, path):
+        if n % 500 == 0:
+            print(f"\r  проверено файлов: {n}", end="", flush=True)
+
+    def found(r):
+        hits.append(r)
+        print(f"\r  [{r.verdict} {r.score}] {r.path}")
+        for reason in r.reasons:
+            print(f"      - {reason}")
+        if quarantine:
+            try:
+                os.rename(r.path, r.path + ".quarantined")
+                print("      -> переименован в *.quarantined")
+            except OSError as e:
+                print(f"      -> не удалось переименовать: {e}")
+    n = guard.scan_paths(roots, stop, prog, found, None, skip, trusted)
+    print(f"\r  проверено файлов: {n}, найдено: {len(hits)}      ")
+    return hits
+
+
+def run_clam(roots):
+    if not glob.glob("/var/lib/clamav/*.c[vl]d"):
+        print("  База ClamAV пуста. Подключитесь к интернету и выполните: sudo freshclam")
+        return
+    print("  ClamAV (может занять много времени)...")
+    subprocess.run(["clamscan", "-r", "-i", "--no-summary"] + roots)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Офлайн-проверка Windows-дисков")
+    ap.add_argument("paths", nargs="*", help="проверить эти папки вместо Windows-дисков")
+    ap.add_argument("--full", action="store_true", help="проверить диск целиком (долго)")
+    ap.add_argument("--clam", action="store_true", help="дополнительно проверить ClamAV")
+    ap.add_argument("--quarantine", action="store_true", help="переименовать найденное в *.quarantined (диск на запись)")
+    a = ap.parse_args()
+
+    total = 0
+    if a.paths:
+        print("Проверка указанных папок")
+        total += len(scan(a.paths, [], [], False))
+        if a.clam:
+            run_clam(a.paths)
+    else:
+        parts = ntfs_partitions()
+        if not parts:
+            print("Разделы NTFS не найдены.")
+            return 0
+        for dev, fs, label, size, mps in parts:
+            print(f"\n== {dev}  {label} ({size}) ==")
+            if fs == "bitlocker":
+                print("  Раздел зашифрован BitLocker, пропускаю.")
+                continue
+            mp = mount(dev, mps, a.quarantine)
+            if not mp:
+                continue
+            win = os.path.join(mp, "Windows")
+            if a.full:
+                roots, skip = [mp], [win]
+                roots.append(os.path.join(win, "Temp")) if os.path.isdir(os.path.join(win, "Temp")) else None
+            else:
+                roots, skip = quick_roots(mp), []
+            if not roots:
+                print("  Это не системный диск Windows. Для полной проверки используйте --full.")
+                continue
+            total += len(scan(roots, skip, [win], a.quarantine))
+            if a.clam:
+                run_clam(roots)
+    print(f"\nГотово. Всего подозрительных файлов: {total}")
+    return 1 if total else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
