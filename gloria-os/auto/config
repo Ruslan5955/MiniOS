@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+lb config noauto \
+  --mode debian \
+  --distribution bookworm \
+  --architectures amd64 \
+  --binary-image iso-hybrid \
+  --bootappend-live "boot=live components username=gloria hostname=gloria-os locales=ru_RU.UTF-8,en_US.UTF-8 keyboard-layouts=us,ru" \
+  --debian-installer none \
+  --archive-areas "main contrib non-free non-free-firmware" \
+  --apt-recommends true \
+  --firmware-chroot true \
+  --firmware-binary true \
+  --iso-application "Gloria OS" \
+  --iso-volume "GLORIA_OS" \
+  --iso-publisher "Gloria OS Project" \
+  --iso-preparer "GitHub Actions"
